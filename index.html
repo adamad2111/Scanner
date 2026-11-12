@@ -1,0 +1,2772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DocuScan Pro — PDF Scanner, Stamp & Signature Studio</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts: Inter + Handwriting Fonts for Typed Signatures -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Dancing+Script:wght@600;700&family=Great+Vibes&family=Inter:wght@400;500;600;700&family=Pacifico&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- PDF.js for importing existing PDFs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <!-- jsPDF for high-resolution multi-page PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            vibes: ['"Great Vibes"', 'cursive'],
+            dancing: ['"Dancing Script"', 'cursive'],
+            pacifico: ['"Pacifico"', 'cursive'],
+            caveat: ['"Caveat"', 'cursive'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Checkered workspace subtle grid */
+    .workspace-grid {
+      background-color: #1e293b;
+      background-image: 
+        radial-gradient(#334155 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    /* Transparent checkerboard for stamp upload preview */
+    .checkerboard-bg {
+      background-color: #ffffff;
+      background-image:
+        linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
+        linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
+        linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    }
+
+    /* Smooth sidebar transitions */
+    .studio-sidebar {
+      transition: width 0.2s ease, max-height 0.2s ease, padding 0.2s ease, opacity 0.15s ease;
+    }
+    .studio-sidebar.collapsed-desktop {
+      width: 0 !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      border-width: 0 !important;
+      overflow: hidden !important;
+      opacity: 0;
+    }
+    @media (max-width: 767px) {
+      .studio-sidebar.collapsed-mobile {
+        max-height: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        border-width: 0 !important;
+        overflow: hidden !important;
+        opacity: 0;
+      }
+    }
+
+    /* Interactive Overlay Selection Box */
+    .overlay-item {
+      position: absolute;
+      user-select: none;
+      touch-action: none;
+      cursor: move;
+      transform-origin: center center;
+    }
+    .overlay-item.selected {
+      outline: 2px dashed #6366f1;
+      outline-offset: 2px;
+    }
+    .overlay-handle {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border-radius: 9999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+      z-index: 30;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .overlay-item.selected .overlay-handle {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .handle-delete {
+      top: -11px;
+      left: -11px;
+      background: #ef4444;
+      color: white;
+      cursor: pointer;
+    }
+    .handle-delete:hover {
+      transform: scale(1.12);
+      background: #dc2626;
+    }
+    .handle-rotate {
+      top: -11px;
+      right: -11px;
+      background: #4f46e5;
+      color: white;
+      cursor: grab;
+    }
+    .handle-rotate:hover {
+      transform: scale(1.12);
+    }
+    .handle-resize {
+      bottom: -11px;
+      right: -11px;
+      background: #10b981;
+      color: white;
+      cursor: nwse-resize;
+    }
+    .handle-resize:hover {
+      transform: scale(1.12);
+    }
+
+    /* Range Slider Styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      background: #334155;
+      height: 5px;
+      border-radius: 999px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: #6366f1;
+      cursor: pointer;
+      border: 2px solid #fff;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans h-screen flex flex-col overflow-hidden select-none">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="bg-slate-900 border-b border-slate-800 px-3 sm:px-4 py-2 flex items-center justify-between gap-2 z-30 shrink-0">
+    <!-- Brand & Sidebar Toggles -->
+    <div class="flex items-center gap-2">
+      <button id="toggleLeftSidebarBtn" onclick="toggleSidebar('left')" title="Toggle Pages Sidebar" class="p-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-indigo-300 border border-slate-700/80 transition">
+        <i data-lucide="panel-left" class="w-4 h-4"></i>
+      </button>
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+        <i data-lucide="scan-line" class="w-4 h-4 text-white"></i>
+      </div>
+      <div class="hidden sm:block">
+        <h1 class="font-bold text-sm tracking-tight text-white flex items-center gap-1.5">
+          DocuScan <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">PRO</span>
+        </h1>
+      </div>
+    </div>
+
+    <!-- Center Action Toolbar: Scan / Upload / Stamp / Signature -->
+    <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-center">
+      <!-- Camera Scan Button -->
+      <button onclick="openCameraModal()" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs sm:text-sm font-medium border border-slate-700 transition shadow-sm">
+        <i data-lucide="camera" class="w-4 h-4 text-sky-400"></i>
+        <span class="hidden md:inline">Scan Camera</span>
+      </button>
+
+      <!-- Upload Image / PDF Button -->
+      <label class="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs sm:text-sm font-medium border border-slate-700 transition cursor-pointer shadow-sm">
+        <i data-lucide="file-plus-2" class="w-4 h-4 text-amber-400"></i>
+        <span class="hidden md:inline">Import File</span>
+        <input id="fileInput" type="file" accept="image/*,.pdf" multiple class="hidden" onchange="handleFileUpload(event)" />
+      </label>
+
+      <div class="h-6 w-[1px] bg-slate-800 mx-0.5 hidden sm:block"></div>
+
+      <!-- Add Signature Button -->
+      <button onclick="openSignatureModal()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-indigo-200 text-xs sm:text-sm font-semibold border border-indigo-500/40 transition shadow-sm">
+        <i data-lucide="pen-tool" class="w-4 h-4 text-indigo-400"></i>
+        <span>Add Signature</span>
+      </button>
+
+      <!-- Add Stamp Button -->
+      <button onclick="openStampModal()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 hover:text-emerald-200 text-xs sm:text-sm font-semibold border border-emerald-500/40 transition shadow-sm">
+        <i data-lucide="stamp" class="w-4 h-4 text-emerald-400"></i>
+        <span>Add Stamp</span>
+      </button>
+    </div>
+
+    <!-- Right Export PDF CTA & Inspector Toggle -->
+    <div class="flex items-center gap-1.5 sm:gap-2">
+      <button onclick="openExportModal()" class="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs sm:text-sm font-semibold shadow-lg shadow-indigo-600/25 transition active:scale-95">
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export PDF</span>
+      </button>
+      <button id="toggleRightSidebarBtn" onclick="toggleSidebar('right')" title="Toggle Enhancements & Inspector Sidebar" class="p-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-indigo-300 border border-slate-700/80 transition">
+        <i data-lucide="panel-right" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN STUDIO WORKSPACE -->
+  <div id="mainStudioContainer" class="flex-1 flex flex-col md:flex-row overflow-hidden">
+
+    <!-- LEFT SIDEBAR: MULTI-PAGE THUMBNAILS (Compact & Collapsible) -->
+    <aside id="leftSidebar" class="studio-sidebar w-full md:w-40 bg-slate-900/90 border-b md:border-b-0 md:border-r border-slate-800 flex md:flex-col shrink-0 z-20">
+      <div class="px-2.5 py-2 border-b border-slate-800 hidden md:flex items-center justify-between">
+        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Pages (<span id="pageCountBadge">0</span>)</span>
+        <button onclick="generateSampleDocument()" title="Add Sample Invoice Page" class="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
+          <i data-lucide="sparkles" class="w-3 h-3"></i> Sample
+        </button>
+      </div>
+
+      <!-- Thumbnail List -->
+      <div id="pageThumbnails" class="flex md:flex-col gap-2 p-2 overflow-x-auto md:overflow-y-auto flex-1 items-center md:items-stretch">
+        <!-- Populated dynamically via JS -->
+      </div>
+
+      <!-- Quick Add Page Strip -->
+      <div class="p-1.5 border-t border-slate-800 hidden md:grid grid-cols-2 gap-1">
+        <button onclick="openCameraModal()" class="flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 font-medium transition">
+          <i data-lucide="camera" class="w-3 h-3 text-sky-400"></i> Scan
+        </button>
+        <label class="flex items-center justify-center gap-1 py-1.5 px-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 font-medium transition cursor-pointer">
+          <i data-lucide="plus" class="w-3 h-3 text-amber-400"></i> Add
+          <input type="file" accept="image/*,.pdf" multiple class="hidden" onchange="handleFileUpload(event)" />
+        </label>
+      </div>
+    </aside>
+
+    <!-- CENTER CANVAS VIEWPORT -->
+    <main id="centerViewport" class="flex-1 flex flex-col relative overflow-hidden workspace-grid">
+      
+      <!-- Top Floating Sub-Toolbar (Rotate, Crop, Fit Width/Page, Zoom 50%-300%, Fullscreen) -->
+      <div class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-2.5 sm:px-3 py-1.5 flex items-center justify-between gap-2 text-xs z-10 shrink-0 overflow-x-auto">
+        <div class="flex items-center gap-1 shrink-0">
+          <button onclick="rotateActivePage(-90)" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 flex items-center gap-1" title="Rotate Left 90°">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+            <span class="hidden lg:inline">Rotate L</span>
+          </button>
+          <button onclick="rotateActivePage(90)" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 flex items-center gap-1" title="Rotate Right 90°">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+            <span class="hidden lg:inline">Rotate R</span>
+          </button>
+          <div class="h-4 w-[1px] bg-slate-700 mx-0.5"></div>
+          <button onclick="openCropModal()" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 flex items-center gap-1" title="Crop / Trim Borders">
+            <i data-lucide="crop" class="w-3.5 h-3.5 text-sky-400"></i>
+            <span>Crop</span>
+          </button>
+        </div>
+
+        <!-- Enhanced Zoom & Fit Controls -->
+        <div class="flex items-center gap-1 bg-slate-800/90 px-2 py-1 rounded-xl border border-slate-700/80 shrink-0">
+          <button onclick="adjustZoom(-0.15)" class="p-1 rounded hover:bg-slate-700 hover:text-white text-slate-300" title="Zoom Out">
+            <i data-lucide="zoom-out" class="w-3.5 h-3.5"></i>
+          </button>
+
+          <select id="zoomPresetSelect" onchange="handleZoomPresetChange(this.value)" title="Zoom Level / Fit Mode" class="bg-slate-900 border border-slate-700 rounded-lg px-1.5 py-0.5 font-mono text-[11px] text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer">
+            <option value="fit-width">Fit Width</option>
+            <option value="fit-page">Fit Page</option>
+            <option value="0.5">50%</option>
+            <option value="0.75">75%</option>
+            <option value="1">100%</option>
+            <option value="1.25">125%</option>
+            <option value="1.5">150%</option>
+            <option value="2">200%</option>
+            <option value="2.5">250%</option>
+            <option value="3">300%</option>
+          </select>
+
+          <span id="zoomLabel" class="font-mono text-[11px] px-1.5 text-indigo-300 font-semibold">100%</span>
+
+          <button onclick="adjustZoom(0.15)" class="p-1 rounded hover:bg-slate-700 hover:text-white text-slate-300" title="Zoom In">
+            <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i>
+          </button>
+
+          <div class="h-3.5 w-[1px] bg-slate-700 mx-0.5"></div>
+
+          <button id="fitWidthBtn" onclick="setFitMode('fit-width')" class="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[11px] font-medium transition" title="Fit Document to Viewport Width">
+            Fit Width
+          </button>
+          <button id="fitPageBtn" onclick="setFitMode('fit-page')" class="px-2 py-0.5 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-medium transition" title="Fit Full Page in View">
+            Fit Page
+          </button>
+          <button onclick="resetZoom()" class="px-1.5 py-0.5 rounded-md bg-slate-700 hover:bg-slate-600 text-[11px] text-slate-200 transition" title="Reset to Default View">
+            Reset
+          </button>
+        </div>
+
+        <!-- Right Preview Utilities: Pan Mode & Fullscreen Preview -->
+        <div class="flex items-center gap-1.5 shrink-0">
+          <span class="hidden xl:inline text-[11px] text-slate-400">Ctrl+Scroll to Zoom • Drag empty space to Pan</span>
+          <button id="fullscreenPreviewBtn" onclick="toggleFullscreenPreview()" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[11px] font-semibold transition" title="Maximize / Fullscreen Preview">
+            <i id="fullscreenIcon" data-lucide="maximize-2" class="w-3.5 h-3.5 text-indigo-400"></i>
+            <span id="fullscreenLabel" class="hidden sm:inline">Expand View</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Scrollable & Pannable Document Stage (Reduced excess outer padding for larger preview) -->
+      <div id="stageContainer" class="flex-1 overflow-auto grid place-items-center p-2 sm:p-4 relative cursor-grab" onclick="deselectAllOverlays(event)">
+        
+        <!-- Empty State (Shown only if 0 pages) -->
+        <div id="emptyState" class="hidden max-w-md w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-6 text-center shadow-2xl">
+          <div class="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="file-scan" class="w-7 h-7 text-indigo-400"></i>
+          </div>
+          <h2 class="text-lg font-bold text-white mb-1">No Document Loaded</h2>
+          <p class="text-xs text-slate-400 mb-5">Scan with your camera, import a PDF or image, or load a sample document to test stamps and signatures.</p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button onclick="openCameraModal()" class="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="camera" class="w-4 h-4"></i> Camera
+            </button>
+            <label class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer border border-slate-700">
+              <i data-lucide="upload" class="w-4 h-4"></i> Upload
+              <input type="file" accept="image/*,.pdf" multiple class="hidden" onchange="handleFileUpload(event)" />
+            </label>
+            <button onclick="generateSampleDocument()" class="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="sparkles" class="w-4 h-4"></i> Sample Doc
+            </button>
+          </div>
+        </div>
+
+        <!-- Active Document Wrapper (Holds Canvas + Interactive Stamps/Signatures) -->
+        <div id="documentWrapper" class="relative shadow-2xl shadow-black/80 bg-white origin-center my-auto" style="display: none;">
+          <canvas id="documentCanvas" class="block pointer-events-none"></canvas>
+          <!-- Interactive Overlays Layer -->
+          <div id="overlaysLayer" class="absolute inset-0 overflow-hidden"></div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- RIGHT SIDEBAR: SCAN FILTERS & ENHANCEMENTS (Compact & Collapsible) -->
+    <aside id="rightSidebar" class="studio-sidebar w-full md:w-56 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 p-3 flex flex-col gap-3.5 shrink-0 overflow-y-auto max-h-52 md:max-h-none z-20">
+      
+      <!-- Scan Filter Presets -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <i data-lucide="wand-2" class="w-3.5 h-3.5 text-indigo-400"></i> Scan Enhancement
+          </h3>
+          <button onclick="resetPageFilters()" class="text-[11px] text-slate-400 hover:text-white">Reset</button>
+        </div>
+
+        <div class="grid grid-cols-4 md:grid-cols-2 gap-1.5" id="filterButtons">
+          <button data-filter="original" onclick="setPageFilter('original')" class="filter-btn py-2 px-2 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition">
+            <i data-lucide="image" class="w-4 h-4"></i>
+            <span>Original</span>
+          </button>
+          <button data-filter="magic" onclick="setPageFilter('magic')" class="filter-btn py-2 px-2 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span>Magic Color</span>
+          </button>
+          <button data-filter="grayscale" onclick="setPageFilter('grayscale')" class="filter-btn py-2 px-2 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition">
+            <i data-lucide="contrast" class="w-4 h-4"></i>
+            <span>Grayscale</span>
+          </button>
+          <button data-filter="bw" onclick="setPageFilter('bw')" class="filter-btn py-2 px-2 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 transition">
+            <i data-lucide="file-text" class="w-4 h-4"></i>
+            <span>B&W Scan</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Fine-Tune Sliders -->
+      <div class="space-y-3 pt-2 border-t border-slate-800">
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-400">Brightness</span>
+            <span id="brightnessVal" class="font-mono text-slate-200">0</span>
+          </div>
+          <input id="brightnessSlider" type="range" min="-80" max="80" value="0" class="w-full" oninput="updateSliderFilter('brightness', this.value)" />
+        </div>
+
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-400">Contrast</span>
+            <span id="contrastVal" class="font-mono text-slate-200">0</span>
+          </div>
+          <input id="contrastSlider" type="range" min="-80" max="100" value="0" class="w-full" oninput="updateSliderFilter('contrast', this.value)" />
+        </div>
+      </div>
+
+      <!-- Active Page Overlays List -->
+      <div class="pt-2 border-t border-slate-800 hidden md:flex flex-col flex-1 min-h-[120px]">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+          <span>Page Elements</span>
+          <span id="overlayCountBadge" class="text-[11px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">0</span>
+        </h3>
+        <div id="overlayLayersList" class="space-y-1.5 overflow-y-auto flex-1 text-xs">
+          <p class="text-slate-500 text-[11px] italic">No stamps or signatures added to this page yet.</p>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 1: CAMERA SCANNER MODAL                                         -->
+  <!-- ===================================================================== -->
+  <div id="cameraModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-white flex items-center gap-2">
+          <i data-lucide="camera" class="w-5 h-5 text-sky-400"></i> Document Camera Scanner
+        </h3>
+        <button onclick="closeCameraModal()" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-4 bg-black relative flex items-center justify-center min-h-[300px] sm:min-h-[380px]">
+        <video id="cameraVideo" autoplay playsinline class="max-h-[60vh] w-auto rounded-xl border border-slate-800 hidden"></video>
+        
+        <!-- Guide Overlay Frame -->
+        <div id="cameraGuide" class="absolute inset-8 border-2 border-dashed border-sky-400/60 rounded-xl pointer-events-none hidden flex items-end justify-center pb-3">
+          <span class="bg-black/60 text-sky-200 text-xs px-3 py-1 rounded-full">Align document edges within frame</span>
+        </div>
+
+        <!-- Fallback message if camera unavailable or blocked -->
+        <div id="cameraFallback" class="text-center p-6 max-w-sm">
+          <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-3">
+            <i data-lucide="video-off" class="w-6 h-6 text-amber-400"></i>
+          </div>
+          <h4 class="font-semibold text-white text-sm mb-1">Camera Preview Unavailable</h4>
+          <p id="cameraErrorMsg" class="text-xs text-slate-400 mb-4">Your browser blocked camera access or no webcam was detected.</p>
+          <button onclick="captureDemoScanFromCamera()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition">
+            Generate Realistic Sample Scan
+          </button>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-slate-900 border-t border-slate-800 flex items-center justify-between gap-3">
+        <button onclick="captureDemoScanFromCamera()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition">
+          Use Demo Scan Page
+        </button>
+        <div class="flex items-center gap-2">
+          <button onclick="closeCameraModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium">
+            Cancel
+          </button>
+          <button id="captureSnapBtn" onclick="captureCameraFrame()" class="px-5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-sky-500/25 transition">
+            <i data-lucide="aperture" class="w-4 h-4"></i> Capture Scan
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 2: ADD SIGNATURE MODAL (Draw / Type / Upload)                   -->
+  <!-- ===================================================================== -->
+  <div id="signatureModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-white flex items-center gap-2">
+          <i data-lucide="pen-tool" class="w-5 h-5 text-indigo-400"></i> Create Signature
+        </h3>
+        <button onclick="closeSignatureModal()" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Mode Tabs -->
+      <div class="grid grid-cols-3 border-b border-slate-800 bg-slate-950/50 p-1.5 gap-1">
+        <button onclick="switchSigTab('draw')" id="sigTab-draw" class="sig-tab py-2 rounded-xl text-xs font-semibold bg-indigo-600 text-white transition">
+          Draw Pad
+        </button>
+        <button onclick="switchSigTab('type')" id="sigTab-type" class="sig-tab py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition">
+          Type Name
+        </button>
+        <button onclick="switchSigTab('upload')" id="sigTab-upload" class="sig-tab py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition">
+          Upload Image
+        </button>
+      </div>
+
+      <div class="p-5">
+        <!-- TAB A: DRAW SIGNATURE -->
+        <div id="sigPanel-draw" class="space-y-3">
+          <div class="flex items-center justify-between">
+            <!-- Ink Colors -->
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400">Ink:</span>
+              <button onclick="setSigColor('#0f172a')" class="w-6 h-6 rounded-full bg-slate-900 border-2 border-white ring-2 ring-indigo-500 sig-color-btn" data-color="#0f172a"></button>
+              <button onclick="setSigColor('#1d4ed8')" class="w-6 h-6 rounded-full bg-blue-700 border-2 border-transparent sig-color-btn" data-color="#1d4ed8"></button>
+              <button onclick="setSigColor('#dc2626')" class="w-6 h-6 rounded-full bg-red-600 border-2 border-transparent sig-color-btn" data-color="#dc2626"></button>
+            </div>
+            <!-- Pen Thickness -->
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400">Tip:</span>
+              <select id="sigStrokeWidth" class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200">
+                <option value="2">Fine</option>
+                <option value="3.5" selected>Medium</option>
+                <option value="5.5">Bold</option>
+              </select>
+              <button onclick="clearSigPad()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl overflow-hidden border-2 border-slate-700 relative">
+            <canvas id="sigPadCanvas" width="460" height="180" class="w-full h-44 cursor-crosshair touch-none block"></canvas>
+            <div class="absolute bottom-3 left-6 right-6 border-b border-slate-300 pointer-events-none flex justify-between text-[10px] text-slate-400">
+              <span>Sign above this line</span>
+              <span>X</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB B: TYPE SIGNATURE -->
+        <div id="sigPanel-type" class="space-y-3 hidden">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Full Name or Initials</label>
+            <input id="typedSigInput" type="text" value="Alex Morgan" placeholder="Type your signature..." oninput="renderTypedSignaturePreview()" class="w-full px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="selectSigFont('Great Vibes')" class="sig-font-btn p-2.5 rounded-xl bg-white text-slate-900 border-2 border-indigo-500 text-2xl font-vibes truncate" data-font="Great Vibes">
+              Alex Morgan
+            </button>
+            <button onclick="selectSigFont('Dancing Script')" class="sig-font-btn p-2.5 rounded-xl bg-white text-slate-900 border-2 border-transparent text-xl font-dancing truncate" data-font="Dancing Script">
+              Alex Morgan
+            </button>
+            <button onclick="selectSigFont('Pacifico')" class="sig-font-btn p-2.5 rounded-xl bg-white text-slate-900 border-2 border-transparent text-lg font-pacifico truncate" data-font="Pacifico">
+              Alex Morgan
+            </button>
+            <button onclick="selectSigFont('Caveat')" class="sig-font-btn p-2.5 rounded-xl bg-white text-slate-900 border-2 border-transparent text-2xl font-caveat truncate" data-font="Caveat">
+              Alex Morgan
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2 pt-1">
+            <span class="text-xs text-slate-400">Ink Color:</span>
+            <button onclick="setTypedSigColor('#0f172a')" class="w-6 h-6 rounded-full bg-slate-900 border-2 border-white"></button>
+            <button onclick="setTypedSigColor('#1d4ed8')" class="w-6 h-6 rounded-full bg-blue-700 border-2 border-slate-600"></button>
+            <button onclick="setTypedSigColor('#dc2626')" class="w-6 h-6 rounded-full bg-red-600 border-2 border-slate-600"></button>
+          </div>
+        </div>
+
+        <!-- TAB C: UPLOAD SIGNATURE -->
+        <div id="sigPanel-upload" class="space-y-3 hidden">
+          <label class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer bg-slate-800/40 transition">
+            <i data-lucide="upload-cloud" class="w-8 h-8 text-indigo-400 mb-2"></i>
+            <span class="text-xs font-semibold text-white">Click to upload signature image</span>
+            <span class="text-[11px] text-slate-400 mt-0.5">PNG with transparent background works best</span>
+            <input type="file" accept="image/*" class="hidden" onchange="handleSigImageUpload(event)" />
+          </label>
+          <div id="uploadedSigPreviewBox" class="hidden bg-white rounded-xl p-3 flex items-center justify-center h-28">
+            <img id="uploadedSigPreviewImg" class="max-h-24 object-contain" alt="Uploaded Signature" />
+          </div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeSignatureModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium">
+          Cancel
+        </button>
+        <button onclick="insertSignatureToDocument()" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/25">
+          Place Signature on Page
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 3: ADD STAMP MODAL (Preset Official Stamps + Custom Builder)    -->
+  <!-- ===================================================================== -->
+  <div id="stampModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl max-h-[92vh] flex flex-col">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between shrink-0">
+        <h3 class="font-bold text-white flex items-center gap-2">
+          <i data-lucide="stamp" class="w-5 h-5 text-emerald-400"></i> Add Official Rubber Stamp
+        </h3>
+        <button onclick="closeStampModal()" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Stamp Tabs (3 Tabs: Preset Stamps, Custom Builder, Upload Image) -->
+      <div class="grid grid-cols-3 border-b border-slate-800 bg-slate-950/50 p-1.5 gap-1 shrink-0">
+        <button onclick="switchStampTab('presets')" id="stampTab-presets" class="py-2 rounded-xl text-xs font-semibold bg-emerald-600 text-white transition">
+          Preset Stamps
+        </button>
+        <button onclick="switchStampTab('custom')" id="stampTab-custom" class="py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition">
+          Custom Stamp
+        </button>
+        <button onclick="switchStampTab('upload')" id="stampTab-upload" class="py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition flex items-center justify-center gap-1">
+          <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+          <span>Upload Image</span>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto flex-1">
+        <!-- Include Date Toggle (Shown for Preset & Custom Text tabs) -->
+        <div id="stampDateToggleRow" class="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-800">
+          <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input id="stampIncludeDate" type="checkbox" checked onchange="renderCustomStampPreview(); renderPresetStampsGrid();" class="rounded bg-slate-800 border-slate-600 text-emerald-500 focus:ring-0" />
+            <span>Include current date subtext (<span id="todayDateLabel" class="text-slate-400 font-mono"></span>)</span>
+          </label>
+        </div>
+
+        <!-- TAB A: PRESET STAMPS -->
+        <div id="stampPanel-presets" class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-72 overflow-y-auto pr-1">
+          <!-- Generated by JS -->
+        </div>
+
+        <!-- TAB B: CUSTOM STAMP BUILDER -->
+        <div id="stampPanel-custom" class="hidden space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Stamp Main Text</label>
+              <input id="customStampText" type="text" value="VERIFIED COPY" maxlength="20" oninput="renderCustomStampPreview()" class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs uppercase font-bold" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Optional Subtext</label>
+              <input id="customStampSub" type="text" value="DEPT. OF FINANCE" maxlength="26" oninput="renderCustomStampPreview()" class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs uppercase" />
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <!-- Shape Selector -->
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs text-slate-400 mr-1">Shape:</span>
+              <button onclick="setCustomStampShape('rect')" class="stamp-shape-btn px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium" data-shape="rect">Box</button>
+              <button onclick="setCustomStampShape('rounded')" class="stamp-shape-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium" data-shape="rounded">Rounded</button>
+              <button onclick="setCustomStampShape('circle')" class="stamp-shape-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium" data-shape="circle">Seal</button>
+            </div>
+
+            <!-- Ink Color -->
+            <div class="flex items-center gap-1.5">
+              <span class="text-xs text-slate-400 mr-1">Ink:</span>
+              <button onclick="setCustomStampColor('#16a34a')" class="w-6 h-6 rounded-full bg-green-600 border-2 border-white"></button>
+              <button onclick="setCustomStampColor('#dc2626')" class="w-6 h-6 rounded-full bg-red-600 border-2 border-transparent"></button>
+              <button onclick="setCustomStampColor('#2563eb')" class="w-6 h-6 rounded-full bg-blue-600 border-2 border-transparent"></button>
+              <button onclick="setCustomStampColor('#7c3aed')" class="w-6 h-6 rounded-full bg-violet-600 border-2 border-transparent"></button>
+              <button onclick="setCustomStampColor('#334155')" class="w-6 h-6 rounded-full bg-slate-700 border-2 border-transparent"></button>
+            </div>
+          </div>
+
+          <!-- Live Custom Stamp Preview -->
+          <div class="bg-white rounded-xl p-4 flex items-center justify-center min-h-[120px]">
+            <img id="customStampPreviewImg" class="max-h-28 object-contain" alt="Custom Stamp Preview" />
+          </div>
+
+          <div class="flex justify-end">
+            <button onclick="insertCustomStamp()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/25">
+              Place Custom Stamp
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB C: UPLOAD OWN STAMP IMAGE -->
+        <div id="stampPanel-upload" class="hidden space-y-4">
+          <!-- Drag & Drop / File Picker Zone -->
+          <label id="stampUploadDropzone" class="border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer bg-slate-800/40 transition text-center">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mb-2">
+              <i data-lucide="image-plus" class="w-5 h-5 text-emerald-400"></i>
+            </div>
+            <span class="text-xs font-semibold text-white">Click or drag & drop your stamp image here</span>
+            <span class="text-[11px] text-slate-400 mt-0.5">Supports PNG, JPG, WebP, or SVG company seals & stamps</span>
+            <input id="customStampFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="hidden" onchange="handleStampFileUpload(event)" />
+          </label>
+
+          <!-- Uploaded Stamp Editor Controls & Live Preview -->
+          <div id="uploadedStampWorkspace" class="hidden space-y-3.5">
+            <!-- Checkerboard Transparent Preview -->
+            <div class="checkerboard-bg rounded-xl p-4 border-2 border-slate-700 flex items-center justify-center min-h-[135px] relative overflow-hidden">
+              <img id="uploadedStampPreviewImg" class="max-h-32 max-w-full object-contain drop-shadow-sm" alt="Uploaded Stamp Preview" />
+              <span id="uploadedStampNameBadge" class="absolute top-2 left-2 bg-slate-900/80 text-slate-200 text-[10px] px-2 py-0.5 rounded-md font-medium truncate max-w-[70%]"></span>
+            </div>
+
+            <!-- Background Removal & Ink Tint Controls -->
+            <div class="bg-slate-800/60 border border-slate-700/70 rounded-xl p-3 space-y-3">
+              <!-- Remove White / Light Background Toggle + Threshold -->
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <label class="flex items-center gap-2 text-xs font-medium text-slate-200 cursor-pointer">
+                    <input id="stampRemoveBgToggle" type="checkbox" checked onchange="processUploadedStampPreview()" class="rounded bg-slate-900 border-slate-600 text-emerald-500 focus:ring-0" />
+                    <span>Remove White / Light Background</span>
+                  </label>
+                  <span id="stampBgThresholdVal" class="font-mono text-[11px] text-emerald-300">215</span>
+                </div>
+                <div id="stampBgThresholdRow" class="flex items-center gap-2">
+                  <span class="text-[10px] text-slate-400 shrink-0">Sensitivity:</span>
+                  <input id="stampBgThresholdSlider" type="range" min="140" max="250" value="215" class="w-full" oninput="processUploadedStampPreview()" />
+                </div>
+              </div>
+
+              <!-- Optional Ink Color Tint Selector -->
+              <div class="pt-2 border-t border-slate-700/70 flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs text-slate-300 font-medium">Tint / Ink Color:</span>
+                <div class="flex items-center gap-1.5" id="uploadedStampTintGroup">
+                  <button onclick="setUploadedStampTint('original')" data-tint="original" class="stamp-tint-btn px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold transition">Original</button>
+                  <button onclick="setUploadedStampTint('#dc2626')" data-tint="#dc2626" title="Stamp Red" class="stamp-tint-btn w-6 h-6 rounded-full bg-red-600 border-2 border-transparent transition"></button>
+                  <button onclick="setUploadedStampTint('#2563eb')" data-tint="#2563eb" title="Official Blue" class="stamp-tint-btn w-6 h-6 rounded-full bg-blue-600 border-2 border-transparent transition"></button>
+                  <button onclick="setUploadedStampTint('#16a34a')" data-tint="#16a34a" title="Emerald Green" class="stamp-tint-btn w-6 h-6 rounded-full bg-green-600 border-2 border-transparent transition"></button>
+                  <button onclick="setUploadedStampTint('#0f172a')" data-tint="#0f172a" title="Classic Black" class="stamp-tint-btn w-6 h-6 rounded-full bg-slate-900 border-2 border-slate-500 transition"></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons: Save to Library & Place on Page -->
+            <div class="flex items-center justify-between gap-2">
+              <button onclick="saveCurrentUploadedStampToLibrary()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition">
+                <i data-lucide="bookmark-plus" class="w-3.5 h-3.5 text-amber-400"></i>
+                <span>Save Stamp</span>
+              </button>
+              <button onclick="insertUploadedStampToDocument()" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/25 flex items-center gap-1.5 transition">
+                <i data-lucide="check" class="w-4 h-4"></i>
+                <span>Place Stamp on Page</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Saved Custom Stamps Gallery (localStorage) -->
+          <div class="pt-3 border-t border-slate-800">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <i data-lucide="folder-heart" class="w-3.5 h-3.5 text-emerald-400"></i> Saved Custom Stamps
+              </span>
+              <span id="savedStampsCount" class="text-[11px] text-slate-500">0 saved</span>
+            </div>
+            <div id="savedCustomStampsGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-36 overflow-y-auto pr-0.5">
+              <!-- Rendered dynamically from localStorage -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 4: CROP MODAL                                                   -->
+  <!-- ===================================================================== -->
+  <div id="cropModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-white flex items-center gap-2">
+          <i data-lucide="crop" class="w-5 h-5 text-sky-400"></i> Crop & Trim Document Margins
+        </h3>
+        <button onclick="closeCropModal()" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <p class="text-xs text-slate-400">Adjust percentage margins to trim dark scanner borders or unwanted edges.</p>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <label class="flex justify-between text-slate-300 mb-1"><span>Top Trim</span><span id="cropTopVal">0%</span></label>
+            <input id="cropTop" type="range" min="0" max="35" value="0" class="w-full" oninput="updateCropPreview()" />
+          </div>
+          <div>
+            <label class="flex justify-between text-slate-300 mb-1"><span>Bottom Trim</span><span id="cropBottomVal">0%</span></label>
+            <input id="cropBottom" type="range" min="0" max="35" value="0" class="w-full" oninput="updateCropPreview()" />
+          </div>
+          <div>
+            <label class="flex justify-between text-slate-300 mb-1"><span>Left Trim</span><span id="cropLeftVal">0%</span></label>
+            <input id="cropLeft" type="range" min="0" max="35" value="0" class="w-full" oninput="updateCropPreview()" />
+          </div>
+          <div>
+            <label class="flex justify-between text-slate-300 mb-1"><span>Right Trim</span><span id="cropRightVal">0%</span></label>
+            <input id="cropRight" type="range" min="0" max="35" value="0" class="w-full" oninput="updateCropPreview()" />
+          </div>
+        </div>
+
+        <div class="bg-slate-950 rounded-xl p-3 flex items-center justify-center max-h-60 overflow-hidden">
+          <canvas id="cropPreviewCanvas" class="max-h-52 w-auto border border-slate-700"></canvas>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeCropModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium">Cancel</button>
+        <button onclick="applyCropToActivePage()" class="px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold">Apply Crop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL 5: EXPORT PDF MODAL                                             -->
+  <!-- ===================================================================== -->
+  <div id="exportModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="font-bold text-white flex items-center gap-2">
+          <i data-lucide="file-check-2" class="w-5 h-5 text-indigo-400"></i> Export Scanned PDF
+        </h3>
+        <button onclick="closeExportModal()" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Output Filename</label>
+          <div class="flex items-center bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+            <input id="exportFileName" type="text" value="scanned-document" class="flex-1 bg-transparent px-3.5 py-2 text-sm text-white focus:outline-none" />
+            <span class="px-3 text-xs font-mono text-slate-400 bg-slate-850">.pdf</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Page Format</label>
+            <select id="exportPageFormat" class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white">
+              <option value="fit" selected>Fit to Scan Size</option>
+              <option value="a4">A4 Standard</option>
+              <option value="letter">US Letter</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Quality / Compression</label>
+            <select id="exportQuality" class="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white">
+              <option value="0.95" selected>High (Print Ready)</option>
+              <option value="0.80">Balanced (Standard)</option>
+              <option value="0.60">Compact (Email)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3 text-xs text-indigo-200 flex items-start gap-2.5">
+          <i data-lucide="info" class="w-4 h-4 text-indigo-400 shrink-0 mt-0.5"></i>
+          <span>All <strong id="exportPageCountText">1</strong> page(s) including applied filters, stamps, and signatures will be merged into a single downloadable PDF.</span>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-slate-950/60 border-t border-slate-800 flex justify-end gap-2">
+        <button onclick="closeExportModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium">Cancel</button>
+        <button id="confirmExportBtn" onclick="exportToPDF()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-600/25">
+          <i data-lucide="download" class="w-4 h-4"></i> Download PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION BANNER -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ===================================================================== -->
+  <!-- APPLICATION LOGIC                                                     -->
+  <!-- ===================================================================== -->
+  <script>
+    // Configure PDF.js worker
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    // -----------------------------------------------------------------------
+    // STATE MANAGEMENT
+    // -----------------------------------------------------------------------
+    const state = {
+      pages: [], // Array of { id, originalImg, filter, brightness, contrast, rotation, overlays: [] }
+      activePageIndex: -1,
+      zoom: 1,
+      fitMode: 'fit-width', // 'fit-width' | 'fit-page' | 'manual'
+      leftSidebarOpen: true,
+      rightSidebarOpen: true,
+      isExpandedPreview: false,
+      selectedOverlayId: null,
+      cameraStream: null,
+      
+      // Signature Modal State
+      sigTab: 'draw',
+      sigColor: '#0f172a',
+      sigFont: 'Great Vibes',
+      typedSigColor: '#0f172a',
+      uploadedSigDataUrl: null,
+
+      // Custom Stamp State
+      customStampShape: 'rect',
+      customStampColor: '#16a34a',
+
+      // Uploaded Custom Stamp State
+      uploadedStampRawImg: null,
+      uploadedStampFileName: 'Custom Stamp',
+      uploadedStampProcessedUrl: null,
+      uploadedStampAspectRatio: 1.5,
+      uploadedStampTint: 'original',
+      savedCustomStamps: []
+    };
+
+    const SAVED_STAMPS_STORAGE_KEY = 'docuscan_saved_custom_stamps_v1';
+
+    const PRESET_STAMPS = [
+      { text: 'APPROVED', color: '#16a34a', shape: 'rect' },
+      { text: 'CONFIDENTIAL', color: '#dc2626', shape: 'rect' },
+      { text: 'PAID', color: '#2563eb', shape: 'rounded' },
+      { text: 'VERIFIED', color: '#059669', shape: 'circle' },
+      { text: 'URGENT', color: '#ea580c', shape: 'rect' },
+      { text: 'DRAFT', color: '#475569', shape: 'rounded' }
+    ];
+
+    // -----------------------------------------------------------------------
+    // INITIALIZATION
+    // -----------------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initSignaturePad();
+      initStageZoomAndPan();
+      initStampUploadDropzone();
+      loadSavedCustomStamps();
+      
+      const today = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+      document.getElementById('todayDateLabel').textContent = today;
+      
+      renderPresetStampsGrid();
+      renderCustomStampPreview();
+
+      // Load a crisp sample document immediately so user can test stamps/signatures right away
+      generateSampleDocument(true);
+    });
+
+    // -----------------------------------------------------------------------
+    // COLLAPSIBLE SIDEBARS & EXPANDED PREVIEW CONTROLS
+    // -----------------------------------------------------------------------
+    function toggleSidebar(side, forceState = null) {
+      if (side === 'left') {
+        state.leftSidebarOpen = forceState !== null ? forceState : !state.leftSidebarOpen;
+        const el = document.getElementById('leftSidebar');
+        const btn = document.getElementById('toggleLeftSidebarBtn');
+        el.classList.toggle('collapsed-desktop', !state.leftSidebarOpen);
+        el.classList.toggle('collapsed-mobile', !state.leftSidebarOpen);
+        btn.classList.toggle('bg-indigo-600/25', state.leftSidebarOpen);
+        btn.classList.toggle('border-indigo-500/40', state.leftSidebarOpen);
+      } else {
+        state.rightSidebarOpen = forceState !== null ? forceState : !state.rightSidebarOpen;
+        const el = document.getElementById('rightSidebar');
+        const btn = document.getElementById('toggleRightSidebarBtn');
+        el.classList.toggle('collapsed-desktop', !state.rightSidebarOpen);
+        el.classList.toggle('collapsed-mobile', !state.rightSidebarOpen);
+        btn.classList.toggle('bg-indigo-600/25', state.rightSidebarOpen);
+        btn.classList.toggle('border-indigo-500/40', state.rightSidebarOpen);
+      }
+
+      // Sync expanded preview state if both are closed
+      state.isExpandedPreview = !state.leftSidebarOpen && !state.rightSidebarOpen;
+      updateFullscreenButtonUI();
+
+      // Re-fit document after CSS sidebar transition completes
+      setTimeout(() => {
+        if (state.activePageIndex >= 0) renderActiveDocument();
+      }, 220);
+    }
+
+    function toggleFullscreenPreview() {
+      const targetExpanded = !state.isExpandedPreview;
+      state.isExpandedPreview = targetExpanded;
+      toggleSidebar('left', !targetExpanded);
+      toggleSidebar('right', !targetExpanded);
+      updateFullscreenButtonUI();
+
+      // Also request browser fullscreen if supported when expanding
+      if (targetExpanded && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else if (!targetExpanded && document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function updateFullscreenButtonUI() {
+      const label = document.getElementById('fullscreenLabel');
+      const btn = document.getElementById('fullscreenPreviewBtn');
+      if (!label || !btn) return;
+      if (state.isExpandedPreview) {
+        label.textContent = 'Restore Panels';
+        btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-500');
+        btn.classList.remove('bg-slate-800', 'text-slate-200', 'border-slate-700');
+      } else {
+        label.textContent = 'Expand View';
+        btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-500');
+        btn.classList.add('bg-slate-800', 'text-slate-200', 'border-slate-700');
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // STAGE PANNING, CTRL+WHEEL ZOOM & PINCH-TO-ZOOM
+    // -----------------------------------------------------------------------
+    function initStageZoomAndPan() {
+      const stage = document.getElementById('stageContainer');
+      let isPanning = false;
+      let panStartX = 0;
+      let panStartY = 0;
+      let startScrollLeft = 0;
+      let startScrollTop = 0;
+      let initialPinchDist = 0;
+      let initialPinchZoom = 1;
+
+      // Ctrl/Cmd + Mouse Wheel Smooth Zoom
+      stage.addEventListener('wheel', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          const delta = e.deltaY < 0 ? 0.12 : -0.12;
+          setManualZoom(state.zoom + delta);
+        }
+      }, { passive: false });
+
+      // Drag-to-Pan when clicking background or non-overlay document area
+      stage.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest('.overlay-item') || e.target.closest('button') || e.target.closest('label')) return;
+        isPanning = true;
+        stage.classList.remove('cursor-grab');
+        stage.classList.add('cursor-grabbing');
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+        startScrollLeft = stage.scrollLeft;
+        startScrollTop = stage.scrollTop;
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (!isPanning) return;
+        const dx = e.clientX - panStartX;
+        const dy = e.clientY - panStartY;
+        stage.scrollLeft = startScrollLeft - dx;
+        stage.scrollTop = startScrollTop - dy;
+      });
+
+      window.addEventListener('pointerup', () => {
+        if (!isPanning) return;
+        isPanning = false;
+        stage.classList.remove('cursor-grabbing');
+        stage.classList.add('cursor-grab');
+      });
+
+      // Pinch-to-zoom on touchscreens
+      stage.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+          initialPinchDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          initialPinchZoom = state.zoom;
+        }
+      }, { passive: true });
+
+      stage.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && initialPinchDist > 0) {
+          const currentDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          const scaleFactor = currentDist / initialPinchDist;
+          setManualZoom(initialPinchZoom * scaleFactor);
+        }
+      }, { passive: true });
+    }
+
+    // Toast notification helper
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-950/95 border-emerald-500/50 text-emerald-200',
+        error: 'bg-red-950/95 border-red-500/50 text-red-200',
+        info: 'bg-slate-900/95 border-indigo-500/50 text-slate-100'
+      };
+      toast.className = `px-4 py-2.5 rounded-xl border shadow-xl text-xs font-medium flex items-center gap-2 backdrop-blur-md transition-all duration-300 ${colors[type] || colors.info}`;
+      toast.innerHTML = `<span>${message}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // -----------------------------------------------------------------------
+    // SAMPLE DOCUMENT GENERATOR (For instant testing / camera fallback)
+    // -----------------------------------------------------------------------
+    function generateSampleDocument(isInitial = false) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 794;  // A4 aspect ratio at ~96 DPI
+      canvas.height = 1123;
+      const ctx = canvas.getContext('2d');
+
+      // Paper background with subtle realistic scan warmth
+      ctx.fillStyle = '#fcfcfa';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Subtle border
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(45, 45, canvas.width - 90, canvas.height - 90);
+
+      // Header Accent
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(70, 75, 48, 48);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 24px Inter, sans-serif';
+      ctx.fillText('DS', 80, 107);
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 26px Inter, sans-serif';
+      ctx.fillText('SERVICE AGREEMENT & INVOICE', 135, 102);
+      ctx.fillStyle = '#64748b';
+      ctx.font = '14px Inter, sans-serif';
+      ctx.fillText('Reference #: DOC-2026-8841  •  Date: November 12, 2026', 135, 123);
+
+      // Divider
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(70, 150);
+      ctx.lineTo(724, 150);
+      ctx.stroke();
+
+      // Client Details
+      ctx.fillStyle = '#334155';
+      ctx.font = 'bold 14px Inter, sans-serif';
+      ctx.fillText('PREPARED FOR:', 70, 185);
+      ctx.font = '14px Inter, sans-serif';
+      ctx.fillStyle = '#475569';
+      ctx.fillText('Northstar Global Logistics Ltd.', 70, 208);
+      ctx.fillText('450 Harborview Boulevard, Suite 900', 70, 228);
+
+      // Table Header
+      ctx.fillStyle = '#f1f5f9';
+      ctx.fillRect(70, 270, 654, 36);
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 13px Inter, sans-serif';
+      ctx.fillText('DESCRIPTION OF SERVICES', 85, 293);
+      ctx.fillText('QTY', 480, 293);
+      ctx.fillText('AMOUNT', 620, 293);
+
+      // Table Rows
+      const items = [
+        ['Enterprise Cloud Document Archiving Setup', '1', '$2,400.00'],
+        ['Optical Character Recognition (OCR) Pipeline', '2', '$1,150.00'],
+        ['Compliance Security Audit & Digital Sealing', '1', '$850.00']
+      ];
+      let y = 335;
+      ctx.font = '14px Inter, sans-serif';
+      items.forEach(([desc, qty, amt]) => {
+        ctx.fillStyle = '#1e293b';
+        ctx.fillText(desc, 85, y);
+        ctx.fillText(qty, 488, y);
+        ctx.fillText(amt, 620, y);
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.beginPath();
+        ctx.moveTo(70, y + 16);
+        ctx.lineTo(724, y + 16);
+        ctx.stroke();
+        y += 48;
+      });
+
+      // Total Box
+      ctx.fillStyle = '#0f172a';
+      ctx.font = 'bold 16px Inter, sans-serif';
+      ctx.fillText('TOTAL DUE:  $4,400.00 USD', 495, y + 25);
+
+      // Terms Paragraph
+      ctx.fillStyle = '#475569';
+      ctx.font = '13px Inter, sans-serif';
+      const lines = [
+        'TERMS & AUTHORIZATION:',
+        'By signing and stamping below, the authorized representative confirms receipt of the deliverables',
+        'outlined above and approves settlement within 15 business days of the invoice date.'
+      ];
+      lines.forEach((line, i) => {
+        ctx.font = i === 0 ? 'bold 13px Inter, sans-serif' : '13px Inter, sans-serif';
+        ctx.fillText(line, 70, 560 + i * 22);
+      });
+
+      // Signature & Stamp Boxes at Bottom
+      ctx.strokeStyle = '#94a3b8';
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(70, 740, 290, 140);
+      ctx.strokeRect(434, 740, 290, 140);
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.fillText('AUTHORIZED SIGNATURE AREA', 125, 900);
+      ctx.fillText('OFFICIAL COMPANY STAMP AREA', 485, 900);
+
+      const img = new Image();
+      img.onload = () => {
+        addPageFromImage(img);
+        if (!isInitial) showToast('Sample document page added!', 'success');
+      };
+      img.src = canvas.toDataURL('image/png');
+    }
+
+    // -----------------------------------------------------------------------
+    // FILE IMPORT (Images + Multi-Page PDFs via pdf.js)
+    // -----------------------------------------------------------------------
+    async function handleFileUpload(event) {
+      const files = Array.from(event.target.files || []);
+      if (!files.length) return;
+
+      for (const file of files) {
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          await importPdfFile(file);
+        } else if (file.type.startsWith('image/')) {
+          await importImageFile(file);
+        }
+      }
+      event.target.value = '';
+    }
+
+    function importImageFile(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            addPageFromImage(img);
+            showToast(`Imported "${file.name}"`, 'success');
+            resolve();
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function importPdfFile(file) {
+      try {
+        showToast(`Rendering PDF pages from "${file.name}"...`, 'info');
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const viewport = page.getViewport({ scale: 2.0 }); // High crisp DPI
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          
+          await new Promise((res) => {
+            const img = new Image();
+            img.onload = () => {
+              addPageFromImage(img);
+              res();
+            };
+            img.src = canvas.toDataURL('image/png');
+          });
+        }
+        showToast(`Imported ${pdf.numPages} page(s) from PDF!`, 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to parse PDF file.', 'error');
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // CAMERA CAPTURE MODE
+    // -----------------------------------------------------------------------
+    async function openCameraModal() {
+      const modal = document.getElementById('cameraModal');
+      const video = document.getElementById('cameraVideo');
+      const guide = document.getElementById('cameraGuide');
+      const fallback = document.getElementById('cameraFallback');
+      const snapBtn = document.getElementById('captureSnapBtn');
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false
+        });
+        state.cameraStream = stream;
+        video.srcObject = stream;
+        video.classList.remove('hidden');
+        guide.classList.remove('hidden');
+        fallback.classList.add('hidden');
+        snapBtn.disabled = false;
+        snapBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      } catch (err) {
+        video.classList.add('hidden');
+        guide.classList.add('hidden');
+        fallback.classList.remove('hidden');
+        snapBtn.disabled = true;
+        snapBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    function closeCameraModal() {
+      if (state.cameraStream) {
+        state.cameraStream.getTracks().forEach(track => track.stop());
+        state.cameraStream = null;
+      }
+      const modal = document.getElementById('cameraModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function captureCameraFrame() {
+      const video = document.getElementById('cameraVideo');
+      if (!video || !video.videoWidth) return;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+
+      const img = new Image();
+      img.onload = () => {
+        addPageFromImage(img, 'magic'); // Auto-apply Magic Color scan enhancement!
+        closeCameraModal();
+        showToast('Document captured & enhanced with Magic Color!', 'success');
+      };
+      img.src = canvas.toDataURL('image/png');
+    }
+
+    function captureDemoScanFromCamera() {
+      closeCameraModal();
+      generateSampleDocument(false);
+    }
+
+    // -----------------------------------------------------------------------
+    // PAGE & WORKSPACE MANAGEMENT
+    // -----------------------------------------------------------------------
+    function addPageFromImage(imgElement, defaultFilter = 'original') {
+      const newPage = {
+        id: 'page_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        originalImg: imgElement,
+        filter: defaultFilter,
+        brightness: 0,
+        contrast: 0,
+        rotation: 0,
+        overlays: []
+      };
+      state.pages.push(newPage);
+      selectPage(state.pages.length - 1);
+    }
+
+    function selectPage(index) {
+      if (index < 0 || index >= state.pages.length) {
+        state.activePageIndex = -1;
+        document.getElementById('emptyState').classList.remove('hidden');
+        document.getElementById('documentWrapper').style.display = 'none';
+        renderThumbnails();
+        return;
+      }
+
+      state.activePageIndex = index;
+      state.selectedOverlayId = null;
+
+      document.getElementById('emptyState').classList.add('hidden');
+      document.getElementById('documentWrapper').style.display = 'inline-block';
+
+      const page = state.pages[index];
+
+      // Sync right-sidebar filter controls
+      document.getElementById('brightnessSlider').value = page.brightness;
+      document.getElementById('brightnessVal').textContent = page.brightness;
+      document.getElementById('contrastSlider').value = page.contrast;
+      document.getElementById('contrastVal').textContent = page.contrast;
+
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        const isActive = btn.dataset.filter === page.filter;
+        btn.className = isActive
+          ? 'filter-btn py-2 px-2 rounded-xl border border-indigo-500 bg-indigo-600/20 text-indigo-300 text-xs font-semibold flex flex-col items-center gap-1 transition'
+          : 'filter-btn py-2 px-2 rounded-xl border border-slate-800 bg-slate-800/50 hover:bg-slate-800 text-slate-400 text-xs font-medium flex flex-col items-center gap-1 transition';
+      });
+
+      renderActiveDocument();
+      renderThumbnails();
+    }
+
+    function deletePage(index, event) {
+      event.stopPropagation();
+      state.pages.splice(index, 1);
+      if (state.pages.length === 0) {
+        selectPage(-1);
+      } else {
+        selectPage(Math.min(index, state.pages.length - 1));
+      }
+      showToast('Page deleted', 'info');
+    }
+
+    function movePage(index, direction, event) {
+      event.stopPropagation();
+      const target = index + direction;
+      if (target < 0 || target >= state.pages.length) return;
+      const temp = state.pages[index];
+      state.pages[index] = state.pages[target];
+      state.pages[target] = temp;
+      selectPage(target);
+    }
+
+    // -----------------------------------------------------------------------
+    // IMAGE PROCESSING & SCAN FILTERS ENGINE
+    // -----------------------------------------------------------------------
+    function renderFilteredCanvas(page, targetCanvas) {
+      const img = page.originalImg;
+      const isRotated = Math.abs(page.rotation % 180) === 90;
+      const w = isRotated ? img.height : img.width;
+      const h = isRotated ? img.width : img.height;
+
+      targetCanvas.width = w;
+      targetCanvas.height = h;
+      const ctx = targetCanvas.getContext('2d');
+
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+      ctx.rotate((page.rotation * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      ctx.restore();
+
+      // Apply pixel-level scan filters if needed
+      const needsPixelProcessing =
+        page.filter !== 'original' ||
+        Number(page.brightness) !== 0 ||
+        Number(page.contrast) !== 0;
+
+      if (!needsPixelProcessing) return;
+
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+
+      let brightness = Number(page.brightness);
+      let contrast = Number(page.contrast);
+
+      if (page.filter === 'magic') {
+        brightness += 18;
+        contrast += 42;
+      } else if (page.filter === 'bw') {
+        contrast += 65;
+      }
+
+      const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+
+      for (let i = 0; i < data.length; i += 4) {
+        let r = data[i];
+        let g = data[i + 1];
+        let b = data[i + 2];
+
+        // Brightness & Contrast
+        r = factor * (r - 128) + 128 + brightness;
+        g = factor * (g - 128) + 128 + brightness;
+        b = factor * (b - 128) + 128 + brightness;
+
+        // Clamp
+        r = Math.max(0, Math.min(255, r));
+        g = Math.max(0, Math.min(255, g));
+        b = Math.max(0, Math.min(255, b));
+
+        if (page.filter === 'grayscale') {
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          r = g = b = lum;
+        } else if (page.filter === 'bw') {
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          const val = lum > 145 ? 255 : 15;
+          r = g = b = val;
+        } else if (page.filter === 'magic') {
+          // Whiten light paper backgrounds while keeping ink saturated
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          if (lum > 205) {
+            r = Math.min(255, r + 35);
+            g = Math.min(255, g + 35);
+            b = Math.min(255, b + 35);
+          }
+        }
+
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function renderActiveDocument() {
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+
+      const canvas = document.getElementById('documentCanvas');
+      renderFilteredCanvas(page, canvas);
+
+      // Compute responsive fit scale based on active fitMode ('fit-width', 'fit-page', or 'manual')
+      const stage = document.getElementById('stageContainer');
+      const availW = Math.max(300, stage.clientWidth - 28);
+      const availH = Math.max(360, stage.clientHeight - 28);
+
+      const widthFitScale = availW / canvas.width;
+      const pageFitScale = Math.min(availW / canvas.width, availH / canvas.height);
+
+      let displayW, displayH, effectivePct;
+
+      if (state.fitMode === 'fit-width') {
+        // Maximize width so text and details are large and immediately readable
+        const scale = Math.min(widthFitScale, 2.2);
+        displayW = Math.round(canvas.width * scale);
+        displayH = Math.round(canvas.height * scale);
+        state.zoom = +(displayW / canvas.width).toFixed(2);
+        effectivePct = Math.round(state.zoom * 100);
+      } else if (state.fitMode === 'fit-page') {
+        const scale = pageFitScale;
+        displayW = Math.round(canvas.width * scale);
+        displayH = Math.round(canvas.height * scale);
+        state.zoom = +(displayW / canvas.width).toFixed(2);
+        effectivePct = Math.round(state.zoom * 100);
+      } else {
+        // Manual zoom (50% to 300% relative to natural document pixels)
+        displayW = Math.round(canvas.width * state.zoom);
+        displayH = Math.round(canvas.height * state.zoom);
+        effectivePct = Math.round(state.zoom * 100);
+      }
+
+      const wrapper = document.getElementById('documentWrapper');
+      wrapper.style.width = displayW + 'px';
+      wrapper.style.height = displayH + 'px';
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+
+      syncZoomControlsUI(effectivePct);
+
+      renderOverlays();
+      updateThumbnailAt(state.activePageIndex);
+    }
+
+    function syncZoomControlsUI(effectivePct) {
+      const label = document.getElementById('zoomLabel');
+      const presetSelect = document.getElementById('zoomPresetSelect');
+      const fitWidthBtn = document.getElementById('fitWidthBtn');
+      const fitPageBtn = document.getElementById('fitPageBtn');
+
+      if (label) label.textContent = effectivePct + '%';
+
+      if (presetSelect) {
+        if (state.fitMode === 'fit-width' || state.fitMode === 'fit-page') {
+          presetSelect.value = state.fitMode;
+        } else {
+          const rounded = state.zoom.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+          const hasOption = Array.from(presetSelect.options).some(opt => opt.value === rounded);
+          if (hasOption) presetSelect.value = rounded;
+        }
+      }
+
+      if (fitWidthBtn && fitPageBtn) {
+        fitWidthBtn.className = state.fitMode === 'fit-width'
+          ? 'px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[11px] font-medium transition'
+          : 'px-2 py-0.5 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-medium transition';
+        fitPageBtn.className = state.fitMode === 'fit-page'
+          ? 'px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[11px] font-medium transition'
+          : 'px-2 py-0.5 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-medium transition';
+      }
+    }
+
+    function setFitMode(mode) {
+      state.fitMode = mode;
+      renderActiveDocument();
+    }
+
+    function setManualZoom(newZoom) {
+      state.fitMode = 'manual';
+      state.zoom = Math.max(0.5, Math.min(3.0, +Number(newZoom).toFixed(2)));
+      renderActiveDocument();
+    }
+
+    function handleZoomPresetChange(val) {
+      if (val === 'fit-width' || val === 'fit-page') {
+        setFitMode(val);
+      } else {
+        setManualZoom(parseFloat(val));
+      }
+    }
+
+    function setPageFilter(filterName) {
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+      page.filter = filterName;
+      selectPage(state.activePageIndex);
+    }
+
+    function updateSliderFilter(prop, value) {
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+      page[prop] = Number(value);
+      document.getElementById(prop + 'Val').textContent = value;
+      renderActiveDocument();
+    }
+
+    function resetPageFilters() {
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+      page.filter = 'original';
+      page.brightness = 0;
+      page.contrast = 0;
+      selectPage(state.activePageIndex);
+    }
+
+    function rotateActivePage(deg) {
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+      page.rotation = (page.rotation + deg + 360) % 360;
+      renderActiveDocument();
+    }
+
+    function adjustZoom(delta) {
+      setManualZoom(state.zoom + delta);
+    }
+
+    function resetZoom() {
+      state.fitMode = 'fit-width';
+      renderActiveDocument();
+    }
+
+    // -----------------------------------------------------------------------
+    // THUMBNAIL STRIP RENDERING
+    // -----------------------------------------------------------------------
+    function renderThumbnails() {
+      const list = document.getElementById('pageThumbnails');
+      document.getElementById('pageCountBadge').textContent = state.pages.length;
+      list.innerHTML = '';
+
+      state.pages.forEach((page, idx) => {
+        const isActive = idx === state.activePageIndex;
+        const card = document.createElement('div');
+        card.onclick = () => selectPage(idx);
+        card.className = `group relative shrink-0 w-20 md:w-full rounded-xl p-1 border transition cursor-pointer ${
+          isActive
+            ? 'bg-indigo-600/15 border-indigo-500 shadow-md shadow-indigo-500/10'
+            : 'bg-slate-800/60 border-slate-700/70 hover:border-slate-500'
+        }`;
+
+        const thumbCanvas = document.createElement('canvas');
+        thumbCanvas.id = `thumb-canvas-${idx}`;
+        thumbCanvas.className = 'w-full h-20 md:h-28 object-contain bg-white rounded-lg mx-auto block';
+        renderFilteredCanvas(page, thumbCanvas);
+
+        const footer = document.createElement('div');
+        footer.className = 'flex items-center justify-between mt-1.5 px-1 text-[11px]';
+        footer.innerHTML = `
+          <span class="font-semibold ${isActive ? 'text-indigo-300' : 'text-slate-400'}">Page ${idx + 1}</span>
+          <div class="flex items-center gap-0.5">
+            ${idx > 0 ? `<button onclick="movePage(${idx}, -1, event)" class="p-0.5 hover:text-white text-slate-400" title="Move Up"><i data-lucide="chevron-up" class="w-3 h-3"></i></button>` : ''}
+            ${idx < state.pages.length - 1 ? `<button onclick="movePage(${idx}, 1, event)" class="p-0.5 hover:text-white text-slate-400" title="Move Down"><i data-lucide="chevron-down" class="w-3 h-3"></i></button>` : ''}
+            <button onclick="deletePage(${idx}, event)" class="p-0.5 hover:text-red-400 text-slate-400" title="Delete Page"><i data-lucide="trash-2" class="w-3 h-3"></i></button>
+          </div>
+        `;
+
+        card.appendChild(thumbCanvas);
+        card.appendChild(footer);
+        list.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function updateThumbnailAt(idx) {
+      const thumbCanvas = document.getElementById(`thumb-canvas-${idx}`);
+      if (thumbCanvas && state.pages[idx]) {
+        renderFilteredCanvas(state.pages[idx], thumbCanvas);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // INTERACTIVE OVERLAYS (STAMPS & SIGNATURES ON DOCUMENT)
+    // -----------------------------------------------------------------------
+    // Overlays are stored in normalized percentage coordinates (xPct, yPct, wPct)
+    // so they scale accurately regardless of zoom level or PDF export resolution!
+    function addOverlayToPage(dataUrl, label, type, aspectRatio = 2.2) {
+      const page = state.pages[state.activePageIndex];
+      if (!page) {
+        showToast('Please load or scan a document page first.', 'error');
+        return;
+      }
+
+      const wPct = type === 'stamp' ? 0.28 : 0.30;
+      const overlay = {
+        id: 'ov_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+        type,
+        label,
+        dataUrl,
+        xPct: 0.35,
+        yPct: type === 'stamp' ? 0.65 : 0.68,
+        wPct,
+        aspectRatio,
+        rotation: type === 'stamp' ? -6 : 0
+      };
+
+      page.overlays.push(overlay);
+      state.selectedOverlayId = overlay.id;
+      renderOverlays();
+      showToast(`${type === 'stamp' ? 'Stamp' : 'Signature'} added — drag or resize on document`, 'success');
+    }
+
+    function deselectAllOverlays(e) {
+      if (e.target.id === 'stageContainer' || e.target.id === 'overlaysLayer') {
+        state.selectedOverlayId = null;
+        renderOverlays();
+      }
+    }
+
+    function deleteOverlay(id, e) {
+      if (e) e.stopPropagation();
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+      page.overlays = page.overlays.filter(o => o.id !== id);
+      if (state.selectedOverlayId === id) state.selectedOverlayId = null;
+      renderOverlays();
+    }
+
+    function renderOverlays() {
+      const layer = document.getElementById('overlaysLayer');
+      const sidebarList = document.getElementById('overlayLayersList');
+      const countBadge = document.getElementById('overlayCountBadge');
+      layer.innerHTML = '';
+
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+
+      countBadge.textContent = page.overlays.length;
+      if (page.overlays.length === 0) {
+        sidebarList.innerHTML = `<p class="text-slate-500 text-[11px] italic">No stamps or signatures added to this page yet.</p>`;
+      } else {
+        sidebarList.innerHTML = '';
+      }
+
+      const stageW = layer.clientWidth || 1;
+      const stageH = layer.clientHeight || 1;
+
+      page.overlays.forEach((ov) => {
+        const isSelected = ov.id === state.selectedOverlayId;
+        const item = document.createElement('div');
+        item.className = `overlay-item ${isSelected ? 'selected' : ''}`;
+        
+        const pxW = ov.wPct * stageW;
+        const pxH = pxW / ov.aspectRatio;
+        item.style.left = (ov.xPct * stageW) + 'px';
+        item.style.top = (ov.yPct * stageH) + 'px';
+        item.style.width = pxW + 'px';
+        item.style.height = pxH + 'px';
+        item.style.transform = `rotate(${ov.rotation}deg)`;
+
+        const img = document.createElement('img');
+        img.src = ov.dataUrl;
+        img.className = 'w-full h-full object-contain pointer-events-none';
+        item.appendChild(img);
+
+        // Delete Handle
+        const delBtn = document.createElement('div');
+        delBtn.className = 'overlay-handle handle-delete';
+        delBtn.title = 'Remove';
+        delBtn.innerHTML = '✕';
+        delBtn.onpointerdown = (e) => deleteOverlay(ov.id, e);
+        item.appendChild(delBtn);
+
+        // Rotate Handle
+        const rotBtn = document.createElement('div');
+        rotBtn.className = 'overlay-handle handle-rotate';
+        rotBtn.title = 'Rotate';
+        rotBtn.innerHTML = '↻';
+        rotBtn.onpointerdown = (e) => startRotateOverlay(e, ov, item);
+        item.appendChild(rotBtn);
+
+        // Resize Handle
+        const resBtn = document.createElement('div');
+        resBtn.className = 'overlay-handle handle-resize';
+        resBtn.title = 'Resize';
+        resBtn.innerHTML = '⤡';
+        resBtn.onpointerdown = (e) => startResizeOverlay(e, ov);
+        item.appendChild(resBtn);
+
+        // Drag Handler
+        item.onpointerdown = (e) => {
+          if (e.target.classList.contains('overlay-handle')) return;
+          e.stopPropagation();
+          state.selectedOverlayId = ov.id;
+          renderOverlays();
+          startDragOverlay(e, ov);
+        };
+
+        layer.appendChild(item);
+
+        // Sidebar item entry
+        const row = document.createElement('div');
+        row.onclick = () => { state.selectedOverlayId = ov.id; renderOverlays(); };
+        row.className = `flex items-center justify-between px-2.5 py-1.5 rounded-lg border cursor-pointer ${
+          isSelected ? 'bg-indigo-600/20 border-indigo-500 text-white' : 'bg-slate-800/60 border-slate-800 text-slate-300'
+        }`;
+        row.innerHTML = `
+          <span class="truncate font-medium">${ov.type === 'stamp' ? '🔖' : '✍️'} ${ov.label}</span>
+          <button onclick="deleteOverlay('${ov.id}', event)" class="text-slate-400 hover:text-red-400 ml-1">✕</button>
+        `;
+        sidebarList.appendChild(row);
+      });
+    }
+
+    function startDragOverlay(startEvent, ov) {
+      const layer = document.getElementById('overlaysLayer');
+      const stageW = layer.clientWidth;
+      const stageH = layer.clientHeight;
+      const startX = startEvent.clientX;
+      const startY = startEvent.clientY;
+      const origXPct = ov.xPct;
+      const origYPct = ov.yPct;
+
+      function onMove(e) {
+        const dx = (e.clientX - startX) / stageW;
+        const dy = (e.clientY - startY) / stageH;
+        ov.xPct = Math.max(-0.1, Math.min(0.95, origXPct + dx));
+        ov.yPct = Math.max(-0.1, Math.min(0.95, origYPct + dy));
+        renderOverlays();
+      }
+      function onUp() {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    }
+
+    function startResizeOverlay(startEvent, ov) {
+      startEvent.stopPropagation();
+      const layer = document.getElementById('overlaysLayer');
+      const stageW = layer.clientWidth;
+      const startX = startEvent.clientX;
+      const origWPct = ov.wPct;
+
+      function onMove(e) {
+        const dx = (e.clientX - startX) / stageW;
+        ov.wPct = Math.max(0.08, Math.min(0.85, origWPct + dx));
+        renderOverlays();
+      }
+      function onUp() {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    }
+
+    function startRotateOverlay(startEvent, ov, itemEl) {
+      startEvent.stopPropagation();
+      const rect = itemEl.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      function onMove(e) {
+        const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * (180 / Math.PI);
+        ov.rotation = Math.round(angle + 45);
+        renderOverlays();
+      }
+      function onUp() {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    }
+
+    // -----------------------------------------------------------------------
+    // SIGNATURE MODAL LOGIC (Draw, Type, Upload)
+    // -----------------------------------------------------------------------
+    let sigDrawing = false;
+    let sigHasStrokes = false;
+
+    function initSignaturePad() {
+      const canvas = document.getElementById('sigPadCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      function getCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        return {
+          x: (e.clientX - rect.left) * scaleX,
+          y: (e.clientY - rect.top) * scaleY
+        };
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        sigDrawing = true;
+        sigHasStrokes = true;
+        const { x, y } = getCoords(e);
+        ctx.strokeStyle = state.sigColor;
+        ctx.lineWidth = Number(document.getElementById('sigStrokeWidth').value);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        if (!sigDrawing) return;
+        const { x, y } = getCoords(e);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+      });
+
+      window.addEventListener('pointerup', () => {
+        sigDrawing = false;
+      });
+    }
+
+    function clearSigPad() {
+      const canvas = document.getElementById('sigPadCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      sigHasStrokes = false;
+    }
+
+    function setSigColor(color) {
+      state.sigColor = color;
+    }
+
+    function openSignatureModal() {
+      if (state.activePageIndex < 0) {
+        showToast('Import or scan a document first.', 'error');
+        return;
+      }
+      const modal = document.getElementById('signatureModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      renderTypedSignaturePreview();
+    }
+
+    function closeSignatureModal() {
+      const modal = document.getElementById('signatureModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function switchSigTab(tab) {
+      state.sigTab = tab;
+      ['draw', 'type', 'upload'].forEach(t => {
+        document.getElementById(`sigPanel-${t}`).classList.toggle('hidden', t !== tab);
+        document.getElementById(`sigTab-${t}`).className = t === tab
+          ? 'sig-tab py-2 rounded-xl text-xs font-semibold bg-indigo-600 text-white transition'
+          : 'sig-tab py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white transition';
+      });
+    }
+
+    function selectSigFont(fontName) {
+      state.sigFont = fontName;
+      document.querySelectorAll('.sig-font-btn').forEach(btn => {
+        btn.classList.toggle('border-indigo-500', btn.dataset.font === fontName);
+        btn.classList.toggle('border-transparent', btn.dataset.font !== fontName);
+      });
+    }
+
+    function setTypedSigColor(color) {
+      state.typedSigColor = color;
+      renderTypedSignaturePreview();
+    }
+
+    function renderTypedSignaturePreview() {
+      const text = document.getElementById('typedSigInput').value || 'Alex Morgan';
+      document.querySelectorAll('.sig-font-btn').forEach(btn => {
+        btn.textContent = text;
+        btn.style.color = state.typedSigColor;
+      });
+    }
+
+    function handleSigImageUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        state.uploadedSigDataUrl = e.target.result;
+        document.getElementById('uploadedSigPreviewImg').src = e.target.result;
+        document.getElementById('uploadedSigPreviewBox').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function insertSignatureToDocument() {
+      if (state.sigTab === 'draw') {
+        if (!sigHasStrokes) {
+          showToast('Please draw your signature on the pad first.', 'error');
+          return;
+        }
+        const canvas = document.getElementById('sigPadCanvas');
+        const trimmed = trimTransparentCanvas(canvas);
+        addOverlayToPage(trimmed.dataUrl, 'Drawn Signature', 'signature', trimmed.aspectRatio);
+        closeSignatureModal();
+      } else if (state.sigTab === 'type') {
+        const name = (document.getElementById('typedSigInput').value || '').trim();
+        if (!name) {
+          showToast('Please enter your name.', 'error');
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = 600;
+        canvas.height = 180;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = state.typedSigColor;
+        ctx.font = `68px "${state.sigFont}", cursive`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+
+        const trimmed = trimTransparentCanvas(canvas);
+        addOverlayToPage(trimmed.dataUrl, `Signature (${name})`, 'signature', trimmed.aspectRatio);
+        closeSignatureModal();
+      } else if (state.sigTab === 'upload') {
+        if (!state.uploadedSigDataUrl) {
+          showToast('Please upload a signature image first.', 'error');
+          return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          addOverlayToPage(state.uploadedSigDataUrl, 'Uploaded Signature', 'signature', img.width / img.height);
+          closeSignatureModal();
+        };
+        img.src = state.uploadedSigDataUrl;
+      }
+    }
+
+    // Utility to crop empty padding around drawn/typed signature
+    function trimTransparentCanvas(canvas) {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      const imgData = ctx.getImageData(0, 0, w, h).data;
+
+      let minX = w, minY = h, maxX = 0, maxY = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const alpha = imgData[(y * w + x) * 4 + 3];
+          if (alpha > 10) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (maxX <= minX || maxY <= minY) {
+        return { dataUrl: canvas.toDataURL('image/png'), aspectRatio: w / h };
+      }
+
+      const pad = 12;
+      minX = Math.max(0, minX - pad);
+      minY = Math.max(0, minY - pad);
+      maxX = Math.min(w, maxX + pad);
+      maxY = Math.min(h, maxY + pad);
+
+      const trimW = maxX - minX;
+      const trimH = maxY - minY;
+      const out = document.createElement('canvas');
+      out.width = trimW;
+      out.height = trimH;
+      out.getContext('2d').drawImage(canvas, minX, minY, trimW, trimH, 0, 0, trimW, trimH);
+
+      return {
+        dataUrl: out.toDataURL('image/png'),
+        aspectRatio: trimW / trimH
+      };
+    }
+
+    // -----------------------------------------------------------------------
+    // RUBBER STAMP GENERATOR & MODAL LOGIC
+    // -----------------------------------------------------------------------
+    function generateStampDataUrl({ text, subtext = '', color = '#16a34a', shape = 'rect', includeDate = true }) {
+      const canvas = document.createElement('canvas');
+      const isCircle = shape === 'circle';
+      canvas.width = isCircle ? 320 : 460;
+      canvas.height = isCircle ? 320 : 185;
+      const ctx = canvas.getContext('2d');
+
+      const todayStr = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+      const secondaryLine = subtext || (includeDate ? todayStr : '');
+
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+
+      if (isCircle) {
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        // Outer & Inner Seal Rings
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 142, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 128, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Center Banner
+        ctx.font = '900 34px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text.toUpperCase(), cx, secondaryLine ? cy - 12 : cy);
+
+        if (secondaryLine) {
+          ctx.font = 'bold 16px Inter, sans-serif';
+          ctx.fillText(secondaryLine, cx, cy + 24);
+        }
+      } else {
+        const pad = 12;
+        const bw = canvas.width - pad * 2;
+        const bh = canvas.height - pad * 2;
+        const radius = shape === 'rounded' ? 28 : 6;
+
+        // Outer thick rubber border
+        ctx.lineWidth = 8;
+        roundRect(ctx, pad, pad, bw, bh, radius);
+        ctx.stroke();
+
+        // Inner thin border
+        ctx.lineWidth = 2.5;
+        roundRect(ctx, pad + 10, pad + 10, bw - 20, bh - 20, Math.max(2, radius - 6));
+        ctx.stroke();
+
+        // Main Text
+        ctx.font = '900 44px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text.toUpperCase(), canvas.width / 2, secondaryLine ? canvas.height / 2 - 16 : canvas.height / 2);
+
+        if (secondaryLine) {
+          ctx.font = 'bold 17px Inter, sans-serif';
+          ctx.fillText(secondaryLine, canvas.width / 2, canvas.height / 2 + 28);
+        }
+      }
+
+      // Authentic Rubber Stamp Distressed Ink Texture Effect
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 650; i++) {
+        const rx = Math.random() * canvas.width;
+        const ry = Math.random() * canvas.height;
+        const rSize = Math.random() * 2.2;
+        ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.45})`;
+        ctx.fillRect(rx, ry, rSize, rSize);
+      }
+      ctx.restore();
+
+      return {
+        dataUrl: canvas.toDataURL('image/png'),
+        aspectRatio: canvas.width / canvas.height
+      };
+    }
+
+    function roundRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+
+    function openStampModal() {
+      if (state.activePageIndex < 0) {
+        showToast('Import or scan a document first.', 'error');
+        return;
+      }
+      const modal = document.getElementById('stampModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      renderPresetStampsGrid();
+      renderCustomStampPreview();
+      renderSavedCustomStampsGrid();
+    }
+
+    function closeStampModal() {
+      const modal = document.getElementById('stampModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function switchStampTab(tab) {
+      document.getElementById('stampPanel-presets').classList.toggle('hidden', tab !== 'presets');
+      document.getElementById('stampPanel-custom').classList.toggle('hidden', tab !== 'custom');
+      document.getElementById('stampPanel-upload').classList.toggle('hidden', tab !== 'upload');
+      document.getElementById('stampDateToggleRow').classList.toggle('hidden', tab === 'upload');
+
+      ['presets', 'custom', 'upload'].forEach(t => {
+        const btn = document.getElementById(`stampTab-${t}`);
+        if (!btn) return;
+        const baseClasses = t === 'upload'
+          ? 'py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1 '
+          : 'py-2 rounded-xl text-xs font-semibold transition ';
+        btn.className = baseClasses + (tab === t
+          ? 'bg-emerald-600 text-white'
+          : 'text-slate-400 hover:text-white');
+      });
+
+      if (tab === 'upload') {
+        renderSavedCustomStampsGrid();
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // UPLOAD OWN STAMP IMAGE + BACKGROUND REMOVAL + TINT + SAVED GALLERY
+    // -----------------------------------------------------------------------
+    function initStampUploadDropzone() {
+      const dropzone = document.getElementById('stampUploadDropzone');
+      if (!dropzone) return;
+
+      ['dragenter', 'dragover'].forEach(evtName => {
+        dropzone.addEventListener(evtName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('border-emerald-500', 'bg-emerald-500/10');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(evtName => {
+        dropzone.addEventListener(evtName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('border-emerald-500', 'bg-emerald-500/10');
+        });
+      });
+
+      dropzone.addEventListener('drop', (e) => {
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (file) loadUploadedStampFile(file);
+      });
+    }
+
+    function handleStampFileUpload(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      loadUploadedStampFile(file);
+      event.target.value = '';
+    }
+
+    function loadUploadedStampFile(file) {
+      if (!file.type.startsWith('image/')) {
+        showToast('Please select a valid image file (PNG, JPG, WebP, SVG).', 'error');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          state.uploadedStampRawImg = img;
+          state.uploadedStampFileName = file.name.replace(/\.[^/.]+$/, '') || 'Custom Stamp';
+          document.getElementById('uploadedStampNameBadge').textContent = file.name;
+          document.getElementById('uploadedStampWorkspace').classList.remove('hidden');
+          processUploadedStampPreview();
+        };
+        img.onerror = () => showToast('Could not read the selected image.', 'error');
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function setUploadedStampTint(tint) {
+      state.uploadedStampTint = tint;
+      document.querySelectorAll('.stamp-tint-btn').forEach(btn => {
+        const isSelected = btn.dataset.tint === tint;
+        if (btn.dataset.tint === 'original') {
+          btn.className = isSelected
+            ? 'stamp-tint-btn px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold transition'
+            : 'stamp-tint-btn px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] font-medium transition';
+        } else {
+          btn.classList.toggle('ring-2', isSelected);
+          btn.classList.toggle('ring-white', isSelected);
+          btn.classList.toggle('scale-110', isSelected);
+        }
+      });
+      processUploadedStampPreview();
+    }
+
+    function hexToRgb(hex) {
+      const clean = hex.replace('#', '');
+      const num = parseInt(clean, 16);
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+      };
+    }
+
+    function processUploadedStampPreview() {
+      const img = state.uploadedStampRawImg;
+      if (!img) return;
+
+      const removeBg = document.getElementById('stampRemoveBgToggle').checked;
+      const threshold = Number(document.getElementById('stampBgThresholdSlider').value);
+      document.getElementById('stampBgThresholdVal').textContent = threshold;
+      document.getElementById('stampBgThresholdRow').classList.toggle('opacity-40', !removeBg);
+      document.getElementById('stampBgThresholdSlider').disabled = !removeBg;
+
+      // Scale down oversized photos cleanly while preserving crisp stamp detail
+      const maxDim = 700;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const data = imageData.data;
+      const tintColor = state.uploadedStampTint !== 'original' ? hexToRgb(state.uploadedStampTint) : null;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+
+        if (a === 0) continue;
+
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        if (removeBg) {
+          if (lum >= threshold) {
+            data[i + 3] = 0;
+            continue;
+          } else if (lum > threshold - 28) {
+            // Smooth anti-aliased edge feathering around removed white paper
+            const fade = (threshold - lum) / 28;
+            data[i + 3] = Math.round(a * fade);
+          }
+        }
+
+        if (tintColor) {
+          data[i] = tintColor.r;
+          data[i + 1] = tintColor.g;
+          data[i + 2] = tintColor.b;
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+
+      // Trim excess transparent padding around the processed stamp
+      const trimmed = trimTransparentCanvas(canvas);
+      state.uploadedStampProcessedUrl = trimmed.dataUrl;
+      state.uploadedStampAspectRatio = trimmed.aspectRatio;
+
+      document.getElementById('uploadedStampPreviewImg').src = trimmed.dataUrl;
+    }
+
+    function insertUploadedStampToDocument() {
+      if (!state.uploadedStampProcessedUrl) {
+        showToast('Please upload a stamp image first.', 'error');
+        return;
+      }
+      addOverlayToPage(
+        state.uploadedStampProcessedUrl,
+        state.uploadedStampFileName,
+        'stamp',
+        state.uploadedStampAspectRatio
+      );
+      closeStampModal();
+    }
+
+    function loadSavedCustomStamps() {
+      try {
+        const raw = localStorage.getItem(SAVED_STAMPS_STORAGE_KEY);
+        state.savedCustomStamps = raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        state.savedCustomStamps = [];
+      }
+    }
+
+    function persistSavedCustomStamps() {
+      try {
+        localStorage.setItem(SAVED_STAMPS_STORAGE_KEY, JSON.stringify(state.savedCustomStamps));
+      } catch (e) {
+        showToast('Browser storage full — could not save stamp.', 'error');
+      }
+    }
+
+    function saveCurrentUploadedStampToLibrary() {
+      if (!state.uploadedStampProcessedUrl) {
+        showToast('Upload a stamp image first.', 'error');
+        return;
+      }
+
+      // Create compact web-optimized PNG for localStorage persistence
+      const img = new Image();
+      img.onload = () => {
+        const maxSaveDim = 360;
+        const scale = Math.min(1, maxSaveDim / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+
+        const entry = {
+          id: 'saved_stamp_' + Date.now(),
+          name: state.uploadedStampFileName,
+          dataUrl: c.toDataURL('image/png'),
+          aspectRatio: c.width / c.height
+        };
+
+        state.savedCustomStamps.unshift(entry);
+        if (state.savedCustomStamps.length > 16) {
+          state.savedCustomStamps = state.savedCustomStamps.slice(0, 16);
+        }
+        persistSavedCustomStamps();
+        renderSavedCustomStampsGrid();
+        showToast(`Saved "${entry.name}" to your custom stamps!`, 'success');
+      };
+      img.src = state.uploadedStampProcessedUrl;
+    }
+
+    function deleteSavedCustomStamp(id, event) {
+      event.stopPropagation();
+      state.savedCustomStamps = state.savedCustomStamps.filter(s => s.id !== id);
+      persistSavedCustomStamps();
+      renderSavedCustomStampsGrid();
+      showToast('Removed saved stamp', 'info');
+    }
+
+    function renderSavedCustomStampsGrid() {
+      const grid = document.getElementById('savedCustomStampsGrid');
+      const countLabel = document.getElementById('savedStampsCount');
+      if (!grid || !countLabel) return;
+
+      countLabel.textContent = `${state.savedCustomStamps.length} saved`;
+      grid.innerHTML = '';
+
+      if (state.savedCustomStamps.length === 0) {
+        grid.innerHTML = `<p class="col-span-full text-[11px] text-slate-500 italic py-2">No saved custom stamps yet. Upload an image above and click "Save Stamp" to reuse it anytime.</p>`;
+        return;
+      }
+
+      state.savedCustomStamps.forEach(item => {
+        const card = document.createElement('div');
+        card.onclick = () => {
+          addOverlayToPage(item.dataUrl, item.name, 'stamp', item.aspectRatio);
+          closeStampModal();
+        };
+        card.title = `Click to place "${item.name}"`;
+        card.className = 'group relative checkerboard-bg border-2 border-slate-700 hover:border-emerald-500 rounded-xl p-2 h-20 flex items-center justify-center cursor-pointer transition overflow-hidden';
+        card.innerHTML = `
+          <img src="${item.dataUrl}" class="max-h-14 max-w-full object-contain group-hover:scale-105 transition" alt="${item.name}" />
+          <button onclick="deleteSavedCustomStamp('${item.id}', event)" title="Delete Saved Stamp" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-600/90 hover:bg-red-500 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow">✕</button>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function renderPresetStampsGrid() {
+      const grid = document.getElementById('stampPanel-presets');
+      const includeDate = document.getElementById('stampIncludeDate').checked;
+      grid.innerHTML = '';
+
+      PRESET_STAMPS.forEach(preset => {
+        const generated = generateStampDataUrl({ ...preset, includeDate });
+        const btn = document.createElement('button');
+        btn.className = 'bg-white hover:bg-slate-50 border-2 border-slate-700 hover:border-emerald-500 rounded-xl p-3 flex items-center justify-center h-24 transition shadow-sm group';
+        btn.onclick = () => {
+          addOverlayToPage(generated.dataUrl, `${preset.text} Stamp`, 'stamp', generated.aspectRatio);
+          closeStampModal();
+        };
+        btn.innerHTML = `<img src="${generated.dataUrl}" class="max-h-16 object-contain group-hover:scale-105 transition" alt="${preset.text}" />`;
+        grid.appendChild(btn);
+      });
+    }
+
+    function setCustomStampShape(shape) {
+      state.customStampShape = shape;
+      document.querySelectorAll('.stamp-shape-btn').forEach(btn => {
+        btn.className = btn.dataset.shape === shape
+          ? 'stamp-shape-btn px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium'
+          : 'stamp-shape-btn px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium';
+      });
+      renderCustomStampPreview();
+    }
+
+    function setCustomStampColor(color) {
+      state.customStampColor = color;
+      renderCustomStampPreview();
+    }
+
+    function renderCustomStampPreview() {
+      const text = document.getElementById('customStampText').value || 'STAMP';
+      const subtext = document.getElementById('customStampSub').value || '';
+      const includeDate = document.getElementById('stampIncludeDate').checked;
+      const generated = generateStampDataUrl({
+        text,
+        subtext,
+        color: state.customStampColor,
+        shape: state.customStampShape,
+        includeDate
+      });
+      document.getElementById('customStampPreviewImg').src = generated.dataUrl;
+    }
+
+    function insertCustomStamp() {
+      const text = (document.getElementById('customStampText').value || 'STAMP').trim();
+      const subtext = (document.getElementById('customStampSub').value || '').trim();
+      const includeDate = document.getElementById('stampIncludeDate').checked;
+      const generated = generateStampDataUrl({
+        text,
+        subtext,
+        color: state.customStampColor,
+        shape: state.customStampShape,
+        includeDate
+      });
+      addOverlayToPage(generated.dataUrl, `${text.toUpperCase()} Stamp`, 'stamp', generated.aspectRatio);
+      closeStampModal();
+    }
+
+    // -----------------------------------------------------------------------
+    // CROP MODAL LOGIC
+    // -----------------------------------------------------------------------
+    function openCropModal() {
+      if (state.activePageIndex < 0) return;
+      ['cropTop', 'cropBottom', 'cropLeft', 'cropRight'].forEach(id => {
+        document.getElementById(id).value = 0;
+        document.getElementById(id + 'Val').textContent = '0%';
+      });
+      const modal = document.getElementById('cropModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      updateCropPreview();
+    }
+
+    function closeCropModal() {
+      const modal = document.getElementById('cropModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function updateCropPreview() {
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+
+      const t = Number(document.getElementById('cropTop').value);
+      const b = Number(document.getElementById('cropBottom').value);
+      const l = Number(document.getElementById('cropLeft').value);
+      const r = Number(document.getElementById('cropRight').value);
+
+      document.getElementById('cropTopVal').textContent = t + '%';
+      document.getElementById('cropBottomVal').textContent = b + '%';
+      document.getElementById('cropLeftVal').textContent = l + '%';
+      document.getElementById('cropRightVal').textContent = r + '%';
+
+      const srcCanvas = document.createElement('canvas');
+      renderFilteredCanvas(page, srcCanvas);
+
+      const preview = document.getElementById('cropPreviewCanvas');
+      preview.width = srcCanvas.width;
+      preview.height = srcCanvas.height;
+      const ctx = preview.getContext('2d');
+      ctx.drawImage(srcCanvas, 0, 0);
+
+      // Shade cropped-out border areas
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+      const x1 = (l / 100) * preview.width;
+      const y1 = (t / 100) * preview.height;
+      const x2 = preview.width - (r / 100) * preview.width;
+      const y2 = preview.height - (b / 100) * preview.height;
+
+      ctx.fillRect(0, 0, preview.width, y1);
+      ctx.fillRect(0, y2, preview.width, preview.height - y2);
+      ctx.fillRect(0, y1, x1, y2 - y1);
+      ctx.fillRect(x2, y1, preview.width - x2, y2 - y1);
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    }
+
+    function applyCropToActivePage() {
+      const page = state.pages[state.activePageIndex];
+      if (!page) return;
+
+      const t = Number(document.getElementById('cropTop').value) / 100;
+      const b = Number(document.getElementById('cropBottom').value) / 100;
+      const l = Number(document.getElementById('cropLeft').value) / 100;
+      const r = Number(document.getElementById('cropRight').value) / 100;
+
+      // Render rotated base image first
+      const baseCanvas = document.createElement('canvas');
+      const img = page.originalImg;
+      const isRotated = Math.abs(page.rotation % 180) === 90;
+      baseCanvas.width = isRotated ? img.height : img.width;
+      baseCanvas.height = isRotated ? img.width : img.height;
+      const bCtx = baseCanvas.getContext('2d');
+      bCtx.translate(baseCanvas.width / 2, baseCanvas.height / 2);
+      bCtx.rotate((page.rotation * Math.PI) / 180);
+      bCtx.drawImage(img, -img.width / 2, -img.height / 2);
+
+      const sx = Math.round(l * baseCanvas.width);
+      const sy = Math.round(t * baseCanvas.height);
+      const sw = Math.max(50, Math.round((1 - l - r) * baseCanvas.width));
+      const sh = Math.max(50, Math.round((1 - t - b) * baseCanvas.height));
+
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = sw;
+      croppedCanvas.height = sh;
+      croppedCanvas.getContext('2d').drawImage(baseCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      const newImg = new Image();
+      newImg.onload = () => {
+        page.originalImg = newImg;
+        page.rotation = 0;
+        closeCropModal();
+        renderActiveDocument();
+        showToast('Document cropped successfully!', 'success');
+      };
+      newImg.src = croppedCanvas.toDataURL('image/png');
+    }
+
+    // -----------------------------------------------------------------------
+    // HIGH-RESOLUTION MULTI-PAGE PDF EXPORT (jsPDF)
+    // -----------------------------------------------------------------------
+    function openExportModal() {
+      if (state.pages.length === 0) {
+        showToast('Add at least one document page before exporting.', 'error');
+        return;
+      }
+      document.getElementById('exportPageCountText').textContent = state.pages.length;
+      const modal = document.getElementById('exportModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeExportModal() {
+      const modal = document.getElementById('exportModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    async function exportToPDF() {
+      if (state.pages.length === 0) return;
+
+      const btn = document.getElementById('confirmExportBtn');
+      const origHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span>Generating PDF...</span>`;
+
+      try {
+        const { jsPDF } = window.jspdf;
+        const rawName = (document.getElementById('exportFileName').value || 'scanned-document').trim();
+        const fileName = rawName.toLowerCase().endsWith('.pdf') ? rawName : `${rawName}.pdf`;
+        const pageFormat = document.getElementById('exportPageFormat').value;
+        const quality = Number(document.getElementById('exportQuality').value);
+
+        let pdf = null;
+
+        for (let i = 0; i < state.pages.length; i++) {
+          const page = state.pages[i];
+
+          // 1. Render filtered scan image at full resolution
+          const compCanvas = document.createElement('canvas');
+          renderFilteredCanvas(page, compCanvas);
+          const ctx = compCanvas.getContext('2d');
+
+          // 2. Composite all stamps and signatures onto the high-res canvas
+          for (const ov of page.overlays) {
+            await drawOverlayOnCanvas(ctx, ov, compCanvas.width, compCanvas.height);
+          }
+
+          const imgData = compCanvas.toDataURL('image/jpeg', quality);
+          const orientation = compCanvas.width > compCanvas.height ? 'l' : 'p';
+
+          if (pageFormat === 'fit') {
+            // Exact pixel-to-pt match so there are zero white borders
+            const ptW = compCanvas.width * 0.75;
+            const ptH = compCanvas.height * 0.75;
+            if (i === 0) {
+              pdf = new jsPDF({ orientation, unit: 'pt', format: [ptW, ptH] });
+            } else {
+              pdf.addPage([ptW, ptH], orientation);
+            }
+            pdf.addImage(imgData, 'JPEG', 0, 0, ptW, ptH);
+          } else {
+            // Standard A4 or US Letter centered fit
+            if (i === 0) {
+              pdf = new jsPDF({ orientation, unit: 'pt', format: pageFormat });
+            } else {
+              pdf.addPage(pageFormat, orientation);
+            }
+            const pdfW = pdf.internal.pageSize.getWidth();
+            const pdfH = pdf.internal.pageSize.getHeight();
+            const ratio = Math.min(pdfW / compCanvas.width, pdfH / compCanvas.height);
+            const drawW = compCanvas.width * ratio;
+            const drawH = compCanvas.height * ratio;
+            const offsetX = (pdfW - drawW) / 2;
+            const offsetY = (pdfH - drawH) / 2;
+            pdf.addImage(imgData, 'JPEG', offsetX, offsetY, drawW, drawH);
+          }
+        }
+
+        pdf.save(fileName);
+        closeExportModal();
+        showToast(`Exported "${fileName}" successfully!`, 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Error generating PDF file.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+
+    function drawOverlayOnCanvas(ctx, ov, stageW, stageH) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const w = ov.wPct * stageW;
+          const h = w / ov.aspectRatio;
+          const x = ov.xPct * stageW;
+          const y = ov.yPct * stageH;
+
+          ctx.save();
+          ctx.translate(x + w / 2, y + h / 2);
+          ctx.rotate((ov.rotation * Math.PI) / 180);
+          ctx.drawImage(img, -w / 2, -h / 2, w, h);
+          ctx.restore();
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = ov.dataUrl;
+      });
+    }
+
+    // Re-fit canvas cleanly on window resize
+    window.addEventListener('resize', () => {
+      if (state.activePageIndex >= 0) {
+        renderActiveDocument();
+      }
+    });
+  </script>
+</body>
+</html>
